@@ -1,2 +1,1 @@
-作业文件夹中的main_o.cpp为课程原本提供的main.cpp
-实际的main.cpp为最终完成的代码
+个人对GAMES101课程作业的实现的记录 -w-
