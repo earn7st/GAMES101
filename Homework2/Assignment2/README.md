@@ -1,0 +1,1 @@
+实现了2*2采样的 super-sampling 来处理 anti-aliasing
