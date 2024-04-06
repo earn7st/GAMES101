@@ -148,8 +148,8 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
 
     const std::vector<std::pair<float, float>> offset = {{0.25, 0.25}, {0.25, 0.75}, {0.75, 0.25}, {0.75, 0.75}};
 
-    for(int y = int(y1); y < int(y2); y ++){
-        for(int x = int(x1); x < int(x2); x ++){
+    for(int y = int(y1); y <= int(y2); y ++){
+        for(int x = int(x1); x <= int(x2); x ++){
             for(int i = 0; i < 4; i ++){
                 float cx = x + offset[i].first;
                 float cy = y + offset[i].second;
@@ -159,9 +159,9 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
                     float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
                     z_interpolated *= w_reciprocal;
                     int ind_ssaa = get_index(x, y) * 4 + i;
-                    if(depth_buf_2xSSAA[ind_ssaa] > abs(z_interpolated)){
+                    if(depth_buf_2xSSAA[ind_ssaa] > z_interpolated){
                         frame_buf_2xSSAA[ind_ssaa] = t.getColor();
-                        depth_buf_2xSSAA[ind_ssaa] = abs(z_interpolated);
+                        depth_buf_2xSSAA[ind_ssaa] = z_interpolated;
                     }
                 }
             }

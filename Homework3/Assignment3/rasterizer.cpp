@@ -279,8 +279,54 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
     // Use: payload.view_pos = interpolated_shadingcoords;
     // Use: Instead of passing the triangle's color directly to the frame buffer, pass the color to the shaders first to get the final color;
     // Use: auto pixel_color = fragment_shader(payload);
+    
+    auto v = t.toVector4();
 
- 
+    float x1 = width + 1, y1 = height + 1;
+    float x2 = 0, y2 = 0;
+    for(int i = 0; i < 3; i ++){
+        x1 = std::min(x1, t.v[i].x());
+        x2 = std::max(x2, t.v[i].x());
+        y1 = std::min(y1, t.v[i].y());
+        y2 = std::max(y2, t.v[i].y());
+    }
+
+    for(int y = int(y1); y <= int(y2); y ++){
+        for(int x = int(x1); x <= int(x2); x ++){
+            float cx = x + 0.5;
+            float cy = y + 0.5;
+            if(insideTriangle(cx, cy, t.v)){
+                auto[alpha, beta, gamma] = computeBarycentric2D(cx, cy, t.v);
+                float Z = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                float zp = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                zp *= Z;
+                int ind = get_index(x, y);
+                if(depth_buf[ind] > zp){
+                    depth_buf[ind] = zp;
+                    //颜色插值
+                    auto interpolated_color = interpolate(alpha, beta, gamma, t.color[0], t.color[1], t.color[2], 1);
+                    //法向量插值
+                    auto interpolated_normal = interpolate(alpha, beta, gamma, t.normal[0], t.normal[1], t.normal[2], 1);
+                    //纹理颜色插值
+                    auto interpolated_texcoords = interpolate(alpha, beta, gamma, t.tex_coords[0], t.tex_coords[1], t.tex_coords[2], 1);
+                    //内部点位置插值
+                    //view_pos是在MV之后（未经过projection变换）中三角形三个顶点的位置（在rasterizer::draw中也可以看出，view_pos只经过了MV变换）
+                    //interpolated_shadingcoords 实际上就是计算出我们实际上要着色的那个点
+                    //重心坐标明明是在2D空间里做的啊？为什么可以拿来插值3D空间的坐标呢？答案是不行的！这个alpha，beta，gamma本质上是需要经过矫正才能用的,但是误差不大，我们就直接拿过来用了。
+                    //真正正确的需要 *透视矫正*
+                    auto interpolated_shadingcoords = interpolate(alpha, beta, gamma, view_pos[0], view_pos[1], view_pos[2], 1);
+
+                    fragment_shader_payload payload(interpolated_color, interpolated_normal.normalized(), interpolated_texcoords, texture ? &*texture : nullptr);
+                    payload.view_pos = interpolated_shadingcoords;
+                    auto pixel_color = fragment_shader(payload);  
+                    //frame_buf[ind] = pixel_color;
+                    Vector2i p(x, y);
+                    set_pixel(p, pixel_color);  
+                }
+            }
+        }
+    }
+    return ;
 }
 
 void rst::rasterizer::set_model(const Eigen::Matrix4f& m)
