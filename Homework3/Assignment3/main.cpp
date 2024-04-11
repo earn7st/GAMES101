@@ -242,6 +242,25 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
     // Position p = p + kn * n * h(u,v)
     // Normal n = normalize(TBN * ln)
 
+    Eigen::Vector3f t(normal.x() * normal.y() / sqrt(normal.x() * normal.x() + normal.z() * normal.z()),
+                        sqrt(normal.x() * normal.x() + normal.z() * normal.z()),
+                        normal.z() * normal.y() / sqrt(normal.x() * normal.x() + normal.z() * normal.z()));
+    Eigen::Vector3f b = normal.cross(t);
+    Eigen::Matrix3f TBN;
+    TBN << t.x(), b.x(), normal.x(),
+           t.y(), b.y(), normal.y(),
+           t.z(), b.z(), normal.z();
+
+    float u = payload.tex_coords[0], v = payload.tex_coords[1];
+    float w = payload.texture->width, h = payload.texture->height;
+    float dU = kh * kn * (payload.texture->getColor(u + 1.0f/w, v).norm() - payload.texture->getColor(u, v).norm());
+    float dV = kh * kn * (payload.texture->getColor(u, v + 1.0f/h).norm() - payload.texture->getColor(u, v).norm());
+    
+    Eigen::Vector3f ln(-dU, -dV, 1.0f);
+    normal = (TBN * ln).normalized();
+
+    //与bump相比，增加了一步改变着色点位置的操作
+    point += kn * normal * payload.texture->getColor(u, v).norm();
 
     Eigen::Vector3f result_color = {0, 0, 0};
 
@@ -268,7 +287,10 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
 
 
 Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
-{
+{   
+    //这个函数实际上没有将凹凸运用到另外一个材质贴图上，
+    //Assignment3.pdf 中给出的描述是“你将看到可视化的凹凸向量”
+    //实际上就是按照bump方式改变了法向量的 normal shader（这个normal shader的作用也很-w-）
     
     Eigen::Vector3f ka = Eigen::Vector3f(0.005, 0.005, 0.005);
     Eigen::Vector3f kd = payload.color;
@@ -295,15 +317,41 @@ Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
     // Vector t = (x*y/sqrt(x*x+z*z),sqrt(x*x+z*z),z*y/sqrt(x*x+z*z))
     // Vector b = n cross product t
     // Matrix TBN = [t b n]
+    // 切线空间 TBN
     // dU = kh * kn * (h(u+1/w,v)-h(u,v))
     // dV = kh * kn * (h(u,v+1/h)-h(u,v))
     // Vector ln = (-dU, -dV, 1)
     // Normal n = normalize(TBN * ln)
 
+    Eigen::Vector3f t(normal.x() * normal.y() / sqrt(normal.x() * normal.x() + normal.z() * normal.z()),
+                        sqrt(normal.x() * normal.x() + normal.z() * normal.z()),
+                        normal.z() * normal.y() / sqrt(normal.x() * normal.x() + normal.z() * normal.z()));
+    Eigen::Vector3f b = normal.cross(t);
+    //切线tangent 副切线bitangent 法线normal（切线空间下，当前三角形）
+    Eigen::Matrix3f TBN;
+    TBN << t.x(), b.x(), normal.x(),
+           t.y(), b.y(), normal.y(),
+           t.z(), b.z(), normal.z();
+
+    float u = payload.tex_coords[0], v = payload.tex_coords[1];
+    float w = payload.texture->width, h = payload.texture->height;
+    //对于hmap.jpg凹凸贴图，我的理解是它是以一种算法转换出的凹凸纹理图，payload.texture->getColor(u, v).norm()表示将texture(u,v)的颜色转换为高度
+    //这正是norm()的作用（这个转换完的标量我只能理解为高度了，也符合课程内容），之所以可以这么转换，要求算法符合一定规则
+    //以上称作 Bump Map，黑白灰表示的凹凸贴图会更加直观
+    //还有一种是法线贴图 Normal Map，RGB直接代表法向量
+    float dU = kh * kn * (payload.texture->getColor(u + 1.0f/w, v).norm() - payload.texture->getColor(u, v).norm());
+    float dV = kh * kn * (payload.texture->getColor(u, v + 1.0f/h).norm() - payload.texture->getColor(u, v).norm());
+    
+    Eigen::Vector3f ln(-dU, -dV, 1.0f);
+    //扰乱后的法线值
+    normal = (TBN * ln).normalized();
 
     Eigen::Vector3f result_color = {0, 0, 0};
     result_color = normal;
-
+    //最后的result_color是将扰乱后的法线值强行输出成颜色
+    //从结果来看，小牛前方是比较蓝的，因为法向量z方向比较多，对应rgb中的blue，所以是蓝色
+    //右面是比较红，右侧的法向量应该是x方向比较多，对应rgb中的red，所以是红色
+    //绿色同理
     return result_color * 255.f;
 }
 
@@ -371,7 +419,8 @@ int main(int argc, const char** argv)
         }
         else if (argc == 3 && std::string(argv[2]) == "displacement")
         {
-            std::cout << "Rasterizing using the bump shader\n";
+            //有一处错误，原来是"Rasterizing using the bump shader\n"
+            std::cout << "Rasterizing using the displacement shader\n";
             active_shader = displacement_fragment_shader;
         }
     }
