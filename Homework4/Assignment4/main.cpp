@@ -2,7 +2,7 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #define NUM 4   //控制点个数
-#define AA 1    //是否反走样
+#define AA 0    //是否反走样
 
 std::vector<cv::Point2f> control_points;
 
@@ -107,7 +107,7 @@ int main()
 
         if (control_points.size() == NUM) 
         {
-            //naive_bezier(control_points, window);
+            naive_bezier(control_points, window);
             bezier(control_points, window); 
 
             cv::imshow("Bezier Curve", window);
