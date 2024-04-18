@@ -24,3 +24,6 @@ https://zhuanlan.zhihu.com/p/259208999
 #include<Eigen/Eigen>
 ```
 
+
+
+在我的环境下，**作业5中会报cannot find -lubsan的错**，因为框架是在 linux 下的，没有找到 windows 安装这个 libubsan 库的办法，解决方法是**将 CMakeLists.txt 中编译选项 -fsanitize 删去**
