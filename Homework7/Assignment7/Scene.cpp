@@ -111,7 +111,7 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
         float cos_theta_light = dotProduct(NN, -ws);
         L_dir = emit * eval * cos_theta * cos_theta_light / std::pow(obstacle.distance, 2) / pdf_light;
     }
-    
+
     // L_indir
     float P_RR = get_random_float();
     if (P_RR < RussianRoulette)
@@ -119,13 +119,14 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
         Vector3f wi = m->sample(wo, N).normalized();
         Ray reflect(p.coords, wi);
 
+        Vector3f eval = p.m->eval(wo, wi, N);
+        float pdf_reflect = p.m->pdf(wo, wi, N);
+        float cos_theta = dotProduct(wi, N);
+
         Intersection inter = intersect(reflect);
         // 判断打到的物体是否会发光取决于m
         if (inter.happened && !inter.m->hasEmission())
         {
-            Vector3f eval = p.m->eval(wo, wi, N);
-            float pdf_reflect = p.m->pdf(wo, wi, N);
-            float cos_theta = dotProduct(wi, N);
             L_indir = castRay(reflect, depth + 1) * eval * cos_theta / pdf_reflect / RussianRoulette;
         }
     }

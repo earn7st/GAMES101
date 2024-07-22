@@ -9,7 +9,8 @@
 
 enum MaterialType
 {
-    DIFFUSE
+    DIFFUSE,
+    MICROFACET
 };
 
 class Material
@@ -87,6 +88,42 @@ private:
         // kt = 1 - kr;
     }
 
+    // 对于遮蔽阴影函数的计算，使用schlick近似
+    float GeometrySchlickGGX(float NdotV, float k)
+    {
+        float nom = NdotV;
+        float denom = NdotV * (1.0 - k) + k;
+
+        return nom / denom;
+    }
+
+    float GeometrySmith(Vector3f N, Vector3f V, Vector3f L, float roughness)
+    {
+        float r = (roughness + 1.0);
+        float k = (r * r) / 8.0;
+        float NdotV = std::max(dotProduct(N, V), 0.0f);
+        float NdotL = std::max(dotProduct(N, L), 0.0f);
+        float ggx2 = GeometrySchlickGGX(NdotV, k);
+        float ggx1 = GeometrySchlickGGX(NdotL, k);
+
+        return ggx1 * ggx2;
+    }
+
+    // N为宏观平面法线，H为入射出射光线半程向量
+    float DistributionGGX(Vector3f N, Vector3f H, float roughness)
+    {
+        float a = roughness * roughness;
+        float a2 = a * a;
+        float NdotH = std::max(dotProduct(N, H), 0.0f);
+        float NdotH2 = NdotH * NdotH;
+
+        float nom = a2;
+        float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+        denom = M_PI * denom * denom;
+
+        return nom / std::max(denom, 0.0000001f); // prevent divide by zero for roughness=0.0 and NdotH=1.0
+    }
+
     Vector3f toWorld(const Vector3f &a, const Vector3f &N)
     {
         Vector3f B, C;
@@ -113,7 +150,11 @@ public:
     float specularExponent;
     // Texture tex;
 
-    inline Material(MaterialType t = DIFFUSE, Vector3f e = Vector3f(0, 0, 0));
+    // inline Material(MaterialType t = DIFFUSE, Vector3f e = Vector3f(0, 0, 0));
+
+    // 使用 Microfacet
+    inline Material(MaterialType t = MICROFACET, Vector3f e = Vector3f(0, 0, 0));
+
     inline MaterialType getType();
     // inline Vector3f getColor();
     inline Vector3f getColorAt(double u, double v);
@@ -156,6 +197,7 @@ Vector3f Material::sample(const Vector3f &wi, const Vector3f &N)
     switch (m_type)
     {
     case DIFFUSE:
+    case MICROFACET:
     {
         // uniform sample on the hemisphere
         float x_1 = get_random_float(), x_2 = get_random_float();
@@ -174,6 +216,7 @@ float Material::pdf(const Vector3f &wi, const Vector3f &wo, const Vector3f &N)
     switch (m_type)
     {
     case DIFFUSE:
+    case MICROFACET:
     {
         // uniform sample probability 1 / (2 * PI)
         if (dotProduct(wo, N) > 0.0f)
@@ -202,7 +245,43 @@ Vector3f Material::eval(const Vector3f &wi, const Vector3f &wo, const Vector3f &
             return Vector3f(0.0f);
         break;
     }
+    case MICROFACET:
+    {
+        float cosalpha = dotProduct(N, wo);
+        if (cosalpha > 0.0f)
+        {
+            float roughness = 0.5;
+            Vector3f V = -wi;
+            Vector3f L = wo;
+            Vector3f H = (V + L).normalized();
+
+            float F;
+            float etat = 1.85; // 折射率
+            fresnel(wi, N, etat, F);
+
+            float G = GeometrySmith(N, V, L, roughness);
+
+            float D = DistributionGGX(N, H, roughness);
+
+            Vector3f nominator = F * G * D;
+            float denominator = 4 * std::max(dotProduct(N, V), 0.0f) * std::max(dotProduct(N, L), 0.0f);
+            Vector3f specular = nominator / std::max(denominator, 0.001f);
+
+            Vector3f F0 = lerp(0.01f, Kd, roughness);   //这里采用一个差值，计算并代替Ks
+
+            //  能量守恒
+            float k_s = F;
+            float k_d = 1.0f - k_s;
+
+            Vector3f diffuse = 1.0f / M_PI;
+
+            return specular * F0 + diffuse * Kd * k_d;
+        }
+        else
+            return Vector3f(0.0f);
+        break;
     }
+    };
 }
 
 #endif // RAYTRACING_MATERIAL_H
